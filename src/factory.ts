@@ -2,7 +2,7 @@ import { getTableColumns } from 'drizzle-orm'
 import type { Column, InferInsertModel, InferSelectModel, Table } from 'drizzle-orm'
 import { SKIP, getTypeDefault } from './infer.js'
 import { getSemanticDefault } from './semantic.js'
-import { getFaker, getCachedFaker } from './faker-bridge.js'
+import { initFaker, getFaker } from './faker-bridge.js'
 import type { AnyDrizzleDb, Factory, FactoryContext, FactoryOptions, Overrides } from './types.js'
 
 // Minimal internal DB interface for duck-typed operations
@@ -38,14 +38,12 @@ export function defineFactory<TTable extends Table>(
   const columnEntries: Array<[string, Column]> = Object.entries(columnMap)
 
   let seq = 0
-
-  // Pre-load faker eagerly
-  getFaker().catch(() => undefined)
+  const fakerPromise = initFaker()
 
   function build(callOverrides?: Overrides<InferInsertModel<TTable>>): InferInsertModel<TTable> {
     seq += 1
     const ctx: FactoryContext = { seq }
-    const faker = getCachedFaker()
+    const faker = getFaker()
 
     const mergedOverrides = {
       ...options?.overrides,
@@ -90,11 +88,15 @@ export function defineFactory<TTable extends Table>(
     return Array.from({ length: n }, () => build(callOverrides))
   }
 
+  async function ready(): Promise<void> {
+    await fakerPromise
+  }
+
   async function create(
     db: AnyDrizzleDb,
     callOverrides?: Overrides<InferInsertModel<TTable>>,
   ): Promise<InferSelectModel<TTable>> {
-    await getFaker()
+    await fakerPromise
     const data = build(callOverrides)
     const rawDb = toRawDb(db)
 
@@ -163,5 +165,5 @@ export function defineFactory<TTable extends Table>(
     seq = 0
   }
 
-  return { build, buildList, create, createList, state, resetSeq }
+  return { build, buildList, create, createList, state, resetSeq, ready }
 }

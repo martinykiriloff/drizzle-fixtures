@@ -1,11 +1,31 @@
-# drizzle-factory
+# drizzle-fixtures
 
-Type-safe test data factories for [Drizzle ORM](https://orm.drizzle.team). Define your schema once get a fully-typed factory for free. No manual faker mappings required.
+[![CI](https://github.com/martinykiriloff/drizzle-fixtures/actions/workflows/ci.yml/badge.svg)](https://github.com/martinykiriloff/drizzle-fixtures/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/drizzle-fixtures)](https://www.npmjs.com/package/drizzle-fixtures)
+[![license](https://img.shields.io/github/license/martinykiriloff/drizzle-fixtures)](LICENSE)
+
+Type-safe test data factories for [Drizzle ORM](https://orm.drizzle.team).  
+Introspects your schema at runtime. Generates fully-typed fixture data. Zero configuration.
 
 ```ts
-const user = userFactory.build()      // InsertUser no DB needed
-const admin = userFactory.build({ role: 'admin' })
-const saved = await userFactory.create(db) // SelectUser inserts to DB
+// Other factory libraries require you to map every field manually:
+const usersFactory = defineFactory({
+  table: 'users',
+  resolver: ({ sequence }) => ({   // ← you write this for every column
+    id: sequence,
+    email: `user-${sequence}@example.com`,
+    role: 'viewer',
+    verified: false,
+    createdAt: new Date(),
+  }),
+})
+
+// drizzle-fixtures reads your schema and figures it out:
+const userFactory = defineFactory(users)  // ← that's it
+
+const user  = userFactory.build()                  // InsertUser — no DB needed
+const admin = userFactory.build({ role: 'admin' }) // typed override
+const saved = await userFactory.create(db)         // SelectUser — inserts to DB
 ```
 
 ---
@@ -13,6 +33,7 @@ const saved = await userFactory.create(db) // SelectUser inserts to DB
 ## Table of Contents
 
 - [Why](#why)
+- [vs @praha/drizzle-factory](#vs-prahadrizzle-factory)
 - [Install](#install)
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
@@ -27,9 +48,9 @@ const saved = await userFactory.create(db) // SelectUser inserts to DB
 
 ## Why
 
-Most test helpers require you to manually map every column to a fake value. drizzle-factory reads your Drizzle schema at runtime and generates sensible values automatically with full TypeScript inference.
+Most test helpers require you to manually map every column to a fake value. drizzle-fixtures reads your Drizzle schema at runtime and generates sensible values automatically with full TypeScript inference.
 
-| Feature | drizzle-factory |
+| Feature | drizzle-fixtures |
 |---------|----------------|
 | Zero config setup | ✓ |
 | Fully typed `build()` / `create()` | ✓ |
@@ -41,20 +62,40 @@ Most test helpers require you to manually map every column to a fake value. driz
 
 ---
 
+## vs @praha/drizzle-factory
+
+The main alternative is [`@praha/drizzle-factory`](https://github.com/praha-inc/drizzle-factory).
+It is a solid library, but uses a different philosophy: you write a `resolver` function that explicitly maps every column to a value.
+
+drizzle-fixtures takes the opposite approach — schema introspection does the mapping for you.
+
+| | drizzle-fixtures | @praha/drizzle-factory |
+|---|---|---|
+| Setup | Zero config | Manual resolver per table |
+| Value inference | Automatic from schema | Manual |
+| Faker.js | Auto-detected | Not built-in |
+| Related records (`use()`) | Planned (v2) | ✓ |
+| Compose factories | Planned (v2) | ✓ |
+
+**When to use drizzle-fixtures:** You want to get going fast with minimal boilerplate.  
+**When to use @praha/drizzle-factory:** You want full explicit control over every generated value.
+
+---
+
 ## Install
 
 ```bash
 # npm
-npm install --save-dev drizzle-factory
+npm install --save-dev drizzle-fixtures
 
 # pnpm
-pnpm add -D drizzle-factory
+pnpm add -D drizzle-fixtures
 
 # yarn
-yarn add -D drizzle-factory
+yarn add -D drizzle-fixtures
 
 # bun
-bun add -d drizzle-factory
+bun add -d drizzle-fixtures
 ```
 
 **Peer dependencies**
@@ -93,7 +134,7 @@ export const users = pgTable('users', {
 
 ```ts
 // factories/user.ts
-import { defineFactory } from 'drizzle-factory'
+import { defineFactory } from 'drizzle-fixtures'
 import { users } from '../schema'
 
 export const userFactory = defineFactory(users)
@@ -132,7 +173,7 @@ const records = await userFactory.createList(db, 3)
 Creates a factory. Call this once per table, typically in a `factories/` file.
 
 ```ts
-import { defineFactory } from 'drizzle-factory'
+import { defineFactory } from 'drizzle-fixtures'
 
 const userFactory = defineFactory(users, {
  overrides: {
@@ -202,7 +243,7 @@ const admin = await userFactory.create(db, { role: 'admin' })
 
 **Returns:** `Promise<typeof users.$inferSelect>`
 
-> For MySQL (no `RETURNING` support), drizzle-factory automatically does an insert followed by a select by primary key.
+> For MySQL (no `RETURNING` support), drizzle-fixtures automatically does an insert followed by a select by primary key.
 
 ---
 
@@ -266,7 +307,7 @@ beforeEach(() => {
 
 ## Value Generation
 
-drizzle-factory uses a two-level system to generate values.
+drizzle-fixtures uses a two-level system to generate values.
 
 ### Level 1 Semantic name heuristics
 
@@ -324,13 +365,13 @@ These fields are omitted from `build()` output the database handles them:
 - Serial / autoincrement primary keys (`id SERIAL PRIMARY KEY`, `id INTEGER AUTOINCREMENT`)
 - Any column with a DB default (`defaultNow()`, `.default('viewer')`, `.defaultRandom()`, etc.) unless overridden
 
-UUID primary keys are the exception drizzle-factory generates a `crypto.randomUUID()` for them.
+UUID primary keys are the exception drizzle-fixtures generates a `crypto.randomUUID()` for them.
 
 ---
 
 ## Faker.js Integration
 
-Install `@faker-js/faker` and drizzle-factory detects it automatically at runtime. No configuration needed.
+Install `@faker-js/faker` and drizzle-fixtures detects it automatically at runtime. No configuration needed.
 
 ```bash
 npm install --save-dev @faker-js/faker
@@ -356,7 +397,15 @@ When faker is available, semantic heuristics use realistic values:
 | `address` | `faker.location.streetAddress()` |
 | `zip`, `postalCode` | `faker.location.zipCode()` |
 
-> Faker is detected via a dynamic `import()` at module load time. If the package is not installed the import fails silently and drizzle-factory falls back to deterministic values.
+```ts
+const userFactory = defineFactory(users)
+await userFactory.ready() // wait for faker detection — optional but recommended
+const user = userFactory.build() // guaranteed to use faker values if installed
+```
+
+> Calling `build()` without `await factory.ready()` works but may use deterministic values on the first call if faker detection hasn't completed yet.
+
+> Faker is detected via a dynamic `import()` at module load time. If the package is not installed the import fails silently and drizzle-fixtures falls back to deterministic values.
 
 ---
 
@@ -374,10 +423,10 @@ When faker is available, semantic heuristics use realistic values:
 
 ## TypeScript
 
-drizzle-factory is fully typed end-to-end. No `any`.
+drizzle-fixtures is fully typed end-to-end. No `any`.
 
 ```ts
-import { defineFactory } from 'drizzle-factory'
+import { defineFactory } from 'drizzle-fixtures'
 import { users } from './schema'
 
 const factory = defineFactory(users)
@@ -427,7 +476,7 @@ Each factory instance holds a closure variable `seq` starting at 0. It increment
 
 ### MySQL `create()` path
 
-MySQL does not support `RETURNING`. drizzle-factory duck-types the insert query builder if `.returning` is not present as a function on the result of `.values()`, it falls back to:
+MySQL does not support `RETURNING`. drizzle-fixtures duck-types the insert query builder if `.returning` is not present as a function on the result of `.values()`, it falls back to:
 
 1. Execute the insert
 2. Find the primary key column from the table config
@@ -435,7 +484,7 @@ MySQL does not support `RETURNING`. drizzle-factory duck-types the insert query 
 
 ### Faker detection
 
-At module import time drizzle-factory fires `import('@faker-js/faker')` asynchronously and caches the result. `build()` is synchronous and reads the cached value `null` if faker is absent or not yet resolved.
+At module import time drizzle-fixtures fires `import('@faker-js/faker')` asynchronously and caches the result. `build()` is synchronous and reads the cached value `null` if faker is absent or not yet resolved.
 
 ---
 

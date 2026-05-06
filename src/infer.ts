@@ -2,6 +2,15 @@ import type { Column } from 'drizzle-orm'
 
 export const SKIP = Symbol('drizzle-factory:skip')
 
+/**
+ * Column properties used from getTableColumns():
+ * - columnType: string  (e.g. "PgVarchar", "MySqlInt", "SQLiteText")
+ * - dataType: string    (e.g. "string", "number", "boolean", "date", "json")
+ * - notNull: boolean
+ * - hasDefault: boolean (true if .default() or .defaultNow() or .defaultRandom())
+ * - primary: boolean
+ * - enumValues: string[] | undefined
+ */
 export function getTypeDefault(column: Column, seq: number): unknown {
   const dataType = column.dataType as string
   const columnType = column.columnType as string

@@ -29,4 +29,5 @@ export interface Factory<TTable extends Table> {
   createList(db: AnyDrizzleDb, n: number, overrides?: Overrides<InferInsertModel<TTable>>): Promise<Array<InferSelectModel<TTable>>>
   state(name: string, overrides: Overrides<InferInsertModel<TTable>>): Factory<TTable>
   resetSeq(): void
+  ready(): Promise<void>
 }
