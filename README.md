@@ -23,9 +23,9 @@ const usersFactory = defineFactory({
 // drizzle-fixtures reads your schema and figures it out:
 const userFactory = defineFactory(users)  // ← that's it
 
-const user  = userFactory.build()                  // InsertUser — no DB needed
+const user  = userFactory.build()                  // InsertUser   no DB needed
 const admin = userFactory.build({ role: 'admin' }) // typed override
-const saved = await userFactory.create(db)         // SelectUser — inserts to DB
+const saved = await userFactory.create(db)         // SelectUser   inserts to DB
 ```
 
 ---
@@ -52,7 +52,7 @@ const saved = await userFactory.create(db)         // SelectUser — inserts to 
 
 ## Why
 
-Most test helpers require you to manually map every column to a fake value. drizzle-fixtures reads your Drizzle schema at runtime and generates sensible values automatically — with full TypeScript inference and zero configuration.
+Most test helpers require you to manually map every column to a fake value. drizzle-fixtures reads your Drizzle schema at runtime and generates sensible values automatically   with full TypeScript inference and zero configuration.
 
 | Feature | drizzle-fixtures |
 | --- | --- |
@@ -74,7 +74,7 @@ Most test helpers require you to manually map every column to a fake value. driz
 
 The main alternative is [`@praha/drizzle-factory`](https://github.com/praha-inc/drizzle-factory). It is a solid library, but uses a different philosophy: you write a `resolver` function that explicitly maps every column to a value.
 
-drizzle-fixtures takes the opposite approach — schema introspection does the mapping for you.
+drizzle-fixtures takes the opposite approach   schema introspection does the mapping for you.
 
 | | drizzle-fixtures | @praha/drizzle-factory |
 |---|---|---|
@@ -111,10 +111,10 @@ bun add -d drizzle-fixtures
 **Peer dependencies**
 
 ```bash
-# required — already installed if you use Drizzle
+# required   already installed if you use Drizzle
 npm install drizzle-orm
 
-# optional — enables richer generated values (see Faker.js section)
+# optional   enables richer generated values (see Faker.js section)
 npm install --save-dev @faker-js/faker
 ```
 
@@ -307,7 +307,7 @@ const userFactory = defineFactory(users)
 
 const postFactory = defineFactory(posts, {
   overrides: {
-    // use is undefined in build() context — guard with a ternary
+    // use is undefined in build() context   guard with a ternary
     authorId: ({ use, seq }) =>
       use
         ? use(userFactory).then(u => u.id)  // create() → inserts real user
@@ -315,10 +315,10 @@ const postFactory = defineFactory(posts, {
   },
 })
 
-// build() — sync, no DB, authorId = seq value
+// build()   sync, no DB, authorId = seq value
 const post = postFactory.build()
 
-// create() — inserts a user first, then inserts a post with the real user.id
+// create()   inserts a user first, then inserts a post with the real user.id
 const saved = await postFactory.create(db)
 ```
 
@@ -326,7 +326,7 @@ const saved = await postFactory.create(db)
 
 - `use` is `undefined` in `build()` context and a live function in `create()` context
 - Always guard: `use ? use(factory).then(...) : fallback`
-- Each `use()` call creates a **new** related record — no deduplication
+- Each `use()` call creates a **new** related record   no deduplication
 - Circular `use()` chains (A → B → A) throw an error immediately
 
 ### Multiple relations
@@ -384,7 +384,7 @@ const seeder = defineSeeder(db, {
     seed:   () => postFactory.createList(db, 50),
     before: async () => db.delete(posts),
   },
-  // Shorthand — no before hook
+  // Shorthand   no before hook
   tags: () => tagFactory.createList(db, 20),
 })
 
@@ -402,7 +402,7 @@ await seeder.reset()
 await seeder.reset(['posts'])
 ```
 
-> Seeds always execute **sequentially** in definition order — later seeds can safely reference FK values from earlier ones.
+> Seeds always execute **sequentially** in definition order   later seeds can safely reference FK values from earlier ones.
 
 ---
 
@@ -429,7 +429,7 @@ const user = useFactory(userFactory, {
   cleanup: () => db.delete(users),
 })
 
-// Seeder helper — runs seeder.reset() in beforeEach
+// Seeder helper   runs seeder.reset() in beforeEach
 useSeeder(seeder)
 useSeeder(seeder, ['users', 'posts'])  // reset specific seeds only
 ```
@@ -450,7 +450,7 @@ useSeeder(seeder)
 
 drizzle-fixtures uses a two-level system to generate values.
 
-### Level 1 — Semantic name heuristics
+### Level 1   Semantic name heuristics
 
 Checked first. Matches against the TypeScript field name (case-insensitive, substring match).
 
@@ -481,7 +481,7 @@ Checked first. Matches against the TypeScript field name (case-insensitive, subs
 | `address` | `1 Main St` |
 | `zip`, `zipCode`, `postalCode` | `10001` |
 
-### Level 2 — Column type fallback
+### Level 2   Column type fallback
 
 Used when no semantic match found.
 
@@ -501,12 +501,12 @@ Used when no semantic match found.
 
 ### Skip conditions
 
-These fields are omitted from `build()` output — the database handles them:
+These fields are omitted from `build()` output   the database handles them:
 
 - Serial / autoincrement primary keys
 - Any column with a DB default (`defaultNow()`, `.default('viewer')`, `.defaultRandom()`) unless explicitly overridden
 
-> UUID primary keys are the exception — drizzle-fixtures generates a `crypto.randomUUID()` for them.
+> UUID primary keys are the exception   drizzle-fixtures generates a `crypto.randomUUID()` for them.
 
 ---
 
@@ -581,10 +581,10 @@ factory.build({ role: 123 })
 **Override function type:**
 
 ```ts
-// build() context — use is undefined
+// build() context   use is undefined
 type BuildCtx  = { seq: number; use: undefined }
 
-// create() context — use is a live function
+// create() context   use is a live function
 type CreateCtx = { seq: number; use: <T extends Table>(factory: Factory<T>) => Promise<InferSelectModel<T>> }
 
 type FieldOverride<T> = T | ((ctx: BuildCtx | CreateCtx) => T | Promise<T>)
@@ -622,7 +622,7 @@ for each column:
 
 ### MySQL / SingleStore `create()` path
 
-These dialects do not support `RETURNING`. drizzle-fixtures duck-types the insert builder — if `.returning` is not present, it falls back to insert → find PK column → `SELECT * FROM table WHERE pk = insertedValue LIMIT 1`.
+These dialects do not support `RETURNING`. drizzle-fixtures duck-types the insert builder   if `.returning` is not present, it falls back to insert → find PK column → `SELECT * FROM table WHERE pk = insertedValue LIMIT 1`.
 
 ### Faker detection
 
