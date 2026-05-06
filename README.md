@@ -1,11 +1,11 @@
 # drizzle-factory
 
-Type-safe test data factories for [Drizzle ORM](https://orm.drizzle.team). Define your schema once — get a fully-typed factory for free. No manual faker mappings required.
+Type-safe test data factories for [Drizzle ORM](https://orm.drizzle.team). Define your schema once get a fully-typed factory for free. No manual faker mappings required.
 
 ```ts
-const user = userFactory.build()           // InsertUser — no DB needed
+const user = userFactory.build()      // InsertUser no DB needed
 const admin = userFactory.build({ role: 'admin' })
-const saved = await userFactory.create(db) // SelectUser — inserts to DB
+const saved = await userFactory.create(db) // SelectUser inserts to DB
 ```
 
 ---
@@ -27,7 +27,7 @@ const saved = await userFactory.create(db) // SelectUser — inserts to DB
 
 ## Why
 
-Most test helpers require you to manually map every column to a fake value. drizzle-factory reads your Drizzle schema at runtime and generates sensible values automatically — with full TypeScript inference.
+Most test helpers require you to manually map every column to a fake value. drizzle-factory reads your Drizzle schema at runtime and generates sensible values automatically with full TypeScript inference.
 
 | Feature | drizzle-factory |
 |---------|----------------|
@@ -60,10 +60,10 @@ bun add -d drizzle-factory
 **Peer dependencies**
 
 ```bash
-# required — already installed if you use Drizzle
+# required already installed if you use Drizzle
 npm install drizzle-orm
 
-# optional — enables richer generated values (see Faker.js section)
+# optional enables richer generated values (see Faker.js section)
 npm install --save-dev @faker-js/faker
 ```
 
@@ -80,12 +80,12 @@ npm install --save-dev @faker-js/faker
 import { pgTable, serial, text, varchar, boolean, timestamp } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
-  id:        serial('id').primaryKey(),
-  email:     varchar('email', { length: 255 }).notNull(),
-  firstName: text('first_name'),
-  role:      text('role').notNull().default('viewer'),
-  verified:  boolean('verified').notNull().default(false),
-  createdAt: timestamp('created_at').notNull().defaultNow(),
+ id:    serial('id').primaryKey(),
+ email:   varchar('email', { length: 255 }).notNull(),
+ firstName: text('first_name'),
+ role:   text('role').notNull().default('viewer'),
+ verified: boolean('verified').notNull().default(false),
+ createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 ```
 
@@ -135,12 +135,12 @@ Creates a factory. Call this once per table, typically in a `factories/` file.
 import { defineFactory } from 'drizzle-factory'
 
 const userFactory = defineFactory(users, {
-  overrides: {
-    // static value
-    role: 'viewer',
-    // or function receiving { seq }
-    email: ({ seq }) => `user-${seq}@example.com`,
-  },
+ overrides: {
+  // static value
+  role: 'viewer',
+  // or function receiving { seq }
+  email: ({ seq }) => `user-${seq}@example.com`,
+ },
 })
 ```
 
@@ -158,13 +158,13 @@ Returns a typed insert object. Never touches the database. Increments the sequen
 
 ```ts
 const user = userFactory.build()
-// InsertUser — all required fields populated
+// InsertUser all required fields populated
 
 const admin = userFactory.build({ role: 'admin' })
 // call-site overrides merge on top of factory overrides
 
 const custom = userFactory.build({
-  email: ({ seq }) => `custom-${seq}@test.com`,
+ email: ({ seq }) => `custom-${seq}@test.com`,
 })
 // override functions also work at call site
 ```
@@ -195,7 +195,7 @@ Inserts one record and returns the full select result (including DB-generated fi
 
 ```ts
 const user = await userFactory.create(db)
-// SelectUser — has id, defaulted fields, etc.
+// SelectUser has id, defaulted fields, etc.
 
 const admin = await userFactory.create(db, { role: 'admin' })
 ```
@@ -212,7 +212,7 @@ Inserts `n` records sequentially. Returns all rows.
 
 ```ts
 const users = await userFactory.createList(db, 10)
-// SelectUser[] — 10 rows inserted
+// SelectUser[] 10 rows inserted
 ```
 
 **Returns:** `Promise<Array<typeof users.$inferSelect>>`
@@ -225,12 +225,12 @@ Returns a **new factory** with preset overrides merged on top. The original fact
 
 ```ts
 const adminFactory = userFactory.state('admin', {
-  role: 'admin',
-  verified: true,
+ role: 'admin',
+ verified: true,
 })
 
 const admin = adminFactory.build()
-// role: 'admin', verified: true — plus auto-generated email, firstName, etc.
+// role: 'admin', verified: true plus auto-generated email, firstName, etc.
 
 // States can be further overridden at build time
 const superAdmin = adminFactory.build({ email: 'root@example.com' })
@@ -258,7 +258,7 @@ Useful in `beforeEach` when you want predictable seq values across tests:
 
 ```ts
 beforeEach(() => {
-  userFactory.resetSeq()
+ userFactory.resetSeq()
 })
 ```
 
@@ -268,7 +268,7 @@ beforeEach(() => {
 
 drizzle-factory uses a two-level system to generate values.
 
-### Level 1 — Semantic name heuristics
+### Level 1 Semantic name heuristics
 
 Checked first. Matches against the TypeScript field name (case-insensitive, substring match).
 
@@ -299,7 +299,7 @@ Checked first. Matches against the TypeScript field name (case-insensitive, subs
 | `address` | `1 Main St` |
 | `zip`, `zipCode`, `postalCode` | `10001` |
 
-### Level 2 — Column type fallback
+### Level 2 Column type fallback
 
 Used when no semantic match found.
 
@@ -319,12 +319,12 @@ Used when no semantic match found.
 
 ### Skip conditions
 
-These fields are omitted from `build()` output — the database handles them:
+These fields are omitted from `build()` output the database handles them:
 
 - Serial / autoincrement primary keys (`id SERIAL PRIMARY KEY`, `id INTEGER AUTOINCREMENT`)
 - Any column with a DB default (`defaultNow()`, `.default('viewer')`, `.defaultRandom()`, etc.) unless overridden
 
-UUID primary keys are the exception — drizzle-factory generates a `crypto.randomUUID()` for them.
+UUID primary keys are the exception drizzle-factory generates a `crypto.randomUUID()` for them.
 
 ---
 
@@ -384,15 +384,15 @@ const factory = defineFactory(users)
 
 // build() return type is exactly typeof users.$inferInsert
 const user = factory.build()
-//    ^? { email: string; firstName: string | null; role: string; ... }
+//  ^? { email: string; firstName: string | null; role: string; ... }
 
 // create() return type is exactly typeof users.$inferSelect
 const saved = await factory.create(db)
-//    ^? { id: number; email: string; createdAt: Date; ... }
+//  ^? { id: number; email: string; createdAt: Date; ... }
 
-// Overrides are typed — wrong field types are a compile error
+// Overrides are typed wrong field types are a compile error
 factory.build({ role: 123 })
-//                    ^^^ Type 'number' is not assignable to type 'string'
+//          ^^^ Type 'number' is not assignable to type 'string'
 ```
 
 **Override function type:**
@@ -415,10 +415,10 @@ Every override can be either a static value or a function receiving `{ seq }`.
 
 ```
 for each column:
-  1. skip?       → serial PK or hasDefault (no user override) → omit field
-  2. user override provided?  → resolve (static or fn(ctx)) → use it
-  3. semantic match?          → name heuristic → use it
-  4. type fallback            → dataType/columnType dispatch → use it
+ 1. skip?    → serial PK or hasDefault (no user override) → omit field
+ 2. user override provided? → resolve (static or fn(ctx)) → use it
+ 3. semantic match?     → name heuristic → use it
+ 4. type fallback      → dataType/columnType dispatch → use it
 ```
 
 ### Sequence counter
@@ -427,7 +427,7 @@ Each factory instance holds a closure variable `seq` starting at 0. It increment
 
 ### MySQL `create()` path
 
-MySQL does not support `RETURNING`. drizzle-factory duck-types the insert query builder — if `.returning` is not present as a function on the result of `.values()`, it falls back to:
+MySQL does not support `RETURNING`. drizzle-factory duck-types the insert query builder if `.returning` is not present as a function on the result of `.values()`, it falls back to:
 
 1. Execute the insert
 2. Find the primary key column from the table config
@@ -435,7 +435,7 @@ MySQL does not support `RETURNING`. drizzle-factory duck-types the insert query 
 
 ### Faker detection
 
-At module import time drizzle-factory fires `import('@faker-js/faker')` asynchronously and caches the result. `build()` is synchronous and reads the cached value — `null` if faker is absent or not yet resolved.
+At module import time drizzle-factory fires `import('@faker-js/faker')` asynchronously and caches the result. `build()` is synchronous and reads the cached value `null` if faker is absent or not yet resolved.
 
 ---
 
