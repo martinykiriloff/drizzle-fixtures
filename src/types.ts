@@ -8,11 +8,28 @@ export type AnyDrizzleDb =
   | MySql2Database<Record<string, never>>
   | BetterSQLite3Database<Record<string, never>>
 
-export interface FactoryContext {
+/** Context passed to override functions in build() — use is undefined */
+export interface BuildCtx {
   seq: number
+  use: undefined
 }
 
-export type FieldOverride<T> = T | ((ctx: FactoryContext) => T)
+/** Context passed to override functions in create() — use is a live function */
+export interface CreateCtx {
+  seq: number
+  use: <TRelated extends Table>(factory: Factory<TRelated>) => Promise<InferSelectModel<TRelated>>
+}
+
+/** Union context — override functions receive one of these */
+export type FactoryCtx = BuildCtx | CreateCtx
+
+/** @deprecated Use BuildCtx or FactoryCtx */
+export type FactoryContext = BuildCtx
+
+export type FieldOverride<T> =
+  | T
+  | ((ctx: BuildCtx) => T)
+  | ((ctx: FactoryCtx) => T | Promise<T>)
 
 export type Overrides<TInsert> = {
   [K in keyof TInsert]?: FieldOverride<TInsert[K]>

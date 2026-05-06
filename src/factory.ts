@@ -3,9 +3,8 @@ import type { Column, InferInsertModel, InferSelectModel, Table } from 'drizzle-
 import { SKIP, getTypeDefault } from './infer.js'
 import { getSemanticDefault } from './semantic.js'
 import { initFaker, getFaker } from './faker-bridge.js'
-import type { AnyDrizzleDb, Factory, FactoryContext, FactoryOptions, Overrides } from './types.js'
+import type { AnyDrizzleDb, BuildCtx, CreateCtx, Factory, FactoryOptions, Overrides } from './types.js'
 
-// Minimal internal DB interface for duck-typed operations
 interface RawInsertBuilder {
   returning?: () => Promise<Record<string, unknown>[]>
   then?: (resolve: (v: unknown) => void, reject: (e: unknown) => void) => void
@@ -20,15 +19,8 @@ function toRawDb(db: AnyDrizzleDb): RawDb {
   return db as unknown as RawDb
 }
 
-function resolveOverride<T>(
-  override: T | ((ctx: FactoryContext) => T),
-  ctx: FactoryContext,
-): T {
-  if (typeof override === 'function') {
-    return (override as (ctx: FactoryContext) => T)(ctx)
-  }
-  return override
-}
+// Module-level set tracking factories currently being resolved (circular detection)
+const _resolving = new Set<object>()
 
 export function defineFactory<TTable extends Table>(
   table: TTable,
@@ -36,13 +28,14 @@ export function defineFactory<TTable extends Table>(
 ): Factory<TTable> {
   const columnMap = getTableColumns(table) as Record<string, Column>
   const columnEntries: Array<[string, Column]> = Object.entries(columnMap)
+  const identity: object = {}
 
   let seq = 0
   const fakerPromise = initFaker()
 
   function build(callOverrides?: Overrides<InferInsertModel<TTable>>): InferInsertModel<TTable> {
     seq += 1
-    const ctx: FactoryContext = { seq }
+    const buildCtx: BuildCtx = { seq, use: undefined }
     const faker = getFaker()
 
     const mergedOverrides = {
@@ -53,22 +46,28 @@ export function defineFactory<TTable extends Table>(
     const result: Record<string, unknown> = {}
 
     for (const [tsKey, col] of columnEntries) {
-      // User override takes priority
       if (tsKey in mergedOverrides && mergedOverrides[tsKey] !== undefined) {
-        result[tsKey] = resolveOverride(
-          mergedOverrides[tsKey] as unknown | ((ctx: FactoryContext) => unknown),
-          ctx,
-        )
+        const override = mergedOverrides[tsKey]
+        if (typeof override === 'function') {
+          const resolved = (override as (ctx: BuildCtx) => unknown)(buildCtx)
+          if (resolved instanceof Promise) {
+            // Suppress the unhandled rejection before throwing the sync error
+            resolved.catch(() => undefined)
+            throw new Error(
+              `[drizzle-fixtures] Override for field "${tsKey}" returned a Promise in build() context. ` +
+              `build() is synchronous. Guard your use() call: ({ use, seq }) => use ? use(factory).then(...) : seq`,
+            )
+          }
+          result[tsKey] = resolved
+        } else {
+          result[tsKey] = override
+        }
         continue
       }
 
-      // Type-based skip check first (serial PKs, hasDefault fields)
       const typeVal = getTypeDefault(col, seq)
-      if (typeVal === SKIP) {
-        continue
-      }
+      if (typeVal === SKIP) continue
 
-      // Semantic name check
       const semanticVal = getSemanticDefault(tsKey, seq, faker)
       if (semanticVal !== undefined) {
         result[tsKey] = semanticVal
@@ -92,21 +91,17 @@ export function defineFactory<TTable extends Table>(
     await fakerPromise
   }
 
-  async function create(
+  async function insertRow(
     db: AnyDrizzleDb,
-    callOverrides?: Overrides<InferInsertModel<TTable>>,
+    data: Record<string, unknown>,
   ): Promise<InferSelectModel<TTable>> {
-    await fakerPromise
-    const data = build(callOverrides)
     const rawDb = toRawDb(db)
+    const valuesQb = rawDb.insert(table).values(data)
 
-    const valuesQb = rawDb.insert(table).values(data as Record<string, unknown>)
-
-    // Duck-type RETURNING support: PG and SQLite have it, MySQL does not
     if (typeof valuesQb.returning === 'function') {
       const rows = await valuesQb.returning()
       const row = rows[0]
-      if (!row) throw new Error('drizzle-factory: insert returned no rows')
+      if (!row) throw new Error('drizzle-fixtures: insert returned no rows')
       return row as InferSelectModel<TTable>
     }
 
@@ -120,10 +115,10 @@ export function defineFactory<TTable extends Table>(
     })
 
     const pkEntry = columnEntries.find(([, col]) => col.primary)
-    if (!pkEntry) throw new Error('drizzle-factory: cannot find primary key for select-after-insert')
+    if (!pkEntry) throw new Error('drizzle-fixtures: cannot find primary key for select-after-insert')
 
     const [pkTsKey, pkCol] = pkEntry
-    const pkValue = (data as Record<string, unknown>)[pkTsKey]
+    const pkValue = data[pkTsKey]
 
     const { eq } = await import('drizzle-orm')
     const rows = await rawDb
@@ -133,8 +128,71 @@ export function defineFactory<TTable extends Table>(
       .limit(1)
 
     const row = rows[0]
-    if (!row) throw new Error('drizzle-factory: select after insert returned no rows')
+    if (!row) throw new Error('drizzle-fixtures: select after insert returned no rows')
     return row as InferSelectModel<TTable>
+  }
+
+  async function create(
+    db: AnyDrizzleDb,
+    callOverrides?: Overrides<InferInsertModel<TTable>>,
+  ): Promise<InferSelectModel<TTable>> {
+    await fakerPromise
+
+    if (_resolving.has(identity)) {
+      throw new Error(
+        '[drizzle-fixtures] Circular use() detected. ' +
+        'Factory is already being resolved in this call chain.',
+      )
+    }
+    _resolving.add(identity)
+
+    try {
+      seq += 1
+      const faker = getFaker()
+
+      const createCtx: CreateCtx = {
+        seq,
+        use: async <TRelated extends Table>(relatedFactory: Factory<TRelated>) => {
+          return relatedFactory.create(db)
+        },
+      }
+
+      const mergedOverrides = {
+        ...options?.overrides,
+        ...callOverrides,
+      } as Record<string, unknown>
+
+      const data: Record<string, unknown> = {}
+
+      for (const [tsKey, col] of columnEntries) {
+        if (tsKey in mergedOverrides && mergedOverrides[tsKey] !== undefined) {
+          const override = mergedOverrides[tsKey]
+          if (typeof override === 'function') {
+            data[tsKey] = await Promise.resolve(
+              (override as (ctx: CreateCtx) => unknown)(createCtx),
+            )
+          } else {
+            data[tsKey] = override
+          }
+          continue
+        }
+
+        const typeVal = getTypeDefault(col, seq)
+        if (typeVal === SKIP) continue
+
+        const semanticVal = getSemanticDefault(tsKey, seq, faker)
+        if (semanticVal !== undefined) {
+          data[tsKey] = semanticVal
+          continue
+        }
+
+        data[tsKey] = typeVal
+      }
+
+      return await insertRow(db, data)
+    } finally {
+      _resolving.delete(identity)
+    }
   }
 
   async function createList(

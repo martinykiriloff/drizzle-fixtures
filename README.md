@@ -37,6 +37,7 @@ const saved = await userFactory.create(db)         // SelectUser — inserts to 
 - [Install](#install)
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
+- [Related Records](#related-records)
 - [Value Generation](#value-generation)
 - [Faker.js Integration](#fakerjs-integration)
 - [Supported Dialects](#supported-dialects)
@@ -302,6 +303,59 @@ beforeEach(() => {
  userFactory.resetSeq()
 })
 ```
+
+---
+
+## Related Records
+
+Use `use()` inside an override function to create a related record automatically when calling `create()`.
+
+```ts
+import { defineFactory } from 'drizzle-fixtures'
+import { users, posts } from './schema'
+
+const userFactory = defineFactory(users)
+
+const postFactory = defineFactory(posts, {
+  overrides: {
+    // use is undefined in build() context — guard with a ternary
+    authorId: ({ use, seq }) =>
+      use
+        ? use(userFactory).then(u => u.id)  // create() → inserts real user
+        : seq,                               // build() → uses seq as fallback
+  },
+})
+
+// build() — sync, no DB, authorId = seq value
+const post = postFactory.build()
+
+// create() — inserts a user first, then inserts a post with the real user.id
+const saved = await postFactory.create(db)
+// saved.authorId === inserted user's real id
+```
+
+### How it works
+
+- `use` is `undefined` in `build()` context and a live function in `create()` context
+- Always guard: `use ? use(factory).then(...) : fallback`
+- Each `use()` call creates a **new** related record — no deduplication
+- Circular `use()` chains (A → B → A) throw an error immediately
+
+### Multiple relations
+
+```ts
+const commentFactory = defineFactory(comments, {
+  overrides: {
+    authorId: ({ use, seq }) => use ? use(userFactory).then(u => u.id) : seq,
+    postId:   ({ use, seq }) => use ? use(postFactory).then(p => p.id) : seq,
+  },
+})
+
+// Inserts: 1 user (for the post's author) + 1 user (for the comment's author) + 1 post + 1 comment
+const comment = await commentFactory.create(db)
+```
+
+> **Note:** `use()` is not available in `build()` context because `build()` is synchronous and has no database connection. If you call `use()` in `build()` without guarding, a `TypeError` will be thrown. The guard pattern `use ? use(factory)... : fallback` handles both contexts cleanly.
 
 ---
 
