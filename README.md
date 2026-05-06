@@ -4,28 +4,28 @@
 [![npm](https://img.shields.io/npm/v/drizzle-fixtures)](https://www.npmjs.com/package/drizzle-fixtures)
 [![license](https://img.shields.io/github/license/martinykiriloff/drizzle-fixtures)](LICENSE)
 
-Type-safe test data factories for [Drizzle ORM](https://orm.drizzle.team).  
+Type-safe test data factories for [Drizzle ORM](https://orm.drizzle.team). 
 Introspects your schema at runtime. Generates fully-typed fixture data. Zero configuration.
 
 ```ts
 // Other factory libraries require you to map every field manually:
 const usersFactory = defineFactory({
-  table: 'users',
-  resolver: ({ sequence }) => ({   // ← you write this for every column
-    id: sequence,
-    email: `user-${sequence}@example.com`,
-    role: 'viewer',
-    verified: false,
-    createdAt: new Date(),
-  }),
+ table: 'users',
+ resolver: ({ sequence }) => ({  // ← you write this for every column
+  id: sequence,
+  email: `user-${sequence}@example.com`,
+  role: 'viewer',
+  verified: false,
+  createdAt: new Date(),
+ }),
 })
 
 // drizzle-fixtures reads your schema and figures it out:
-const userFactory = defineFactory(users)  // ← that's it
+const userFactory = defineFactory(users) // ← that's it
 
-const user  = userFactory.build()                  // InsertUser — no DB needed
+const user = userFactory.build()         // InsertUser no DB needed
 const admin = userFactory.build({ role: 'admin' }) // typed override
-const saved = await userFactory.create(db)         // SelectUser — inserts to DB
+const saved = await userFactory.create(db)     // SelectUser inserts to DB
 ```
 
 ---
@@ -68,17 +68,17 @@ Most test helpers require you to manually map every column to a fake value. driz
 The main alternative is [`@praha/drizzle-factory`](https://github.com/praha-inc/drizzle-factory).
 It is a solid library, but uses a different philosophy: you write a `resolver` function that explicitly maps every column to a value.
 
-drizzle-fixtures takes the opposite approach — schema introspection does the mapping for you.
+drizzle-fixtures takes the opposite approach schema introspection does the mapping for you.
 
 | | drizzle-fixtures | @praha/drizzle-factory |
 |---|---|---|
 | Setup | Zero config | Manual resolver per table |
 | Value inference | Automatic from schema | Manual |
 | Faker.js | Auto-detected | Not built-in |
-| Related records (`use()`) | Planned (v2) | ✓ |
-| Compose factories | Planned (v2) | ✓ |
+| Related records (`use()`) | ✓ | ✓ |
+| Compose factories | Planned | ✓ |
 
-**When to use drizzle-fixtures:** You want to get going fast with minimal boilerplate.  
+**When to use drizzle-fixtures:** You want to get going fast with minimal boilerplate. 
 **When to use @praha/drizzle-factory:** You want full explicit control over every generated value.
 
 ---
@@ -122,10 +122,10 @@ npm install --save-dev @faker-js/faker
 import { pgTable, serial, text, varchar, boolean, timestamp } from 'drizzle-orm/pg-core'
 
 export const users = pgTable('users', {
- id:    serial('id').primaryKey(),
- email:   varchar('email', { length: 255 }).notNull(),
+ id:  serial('id').primaryKey(),
+ email:  varchar('email', { length: 255 }).notNull(),
  firstName: text('first_name'),
- role:   text('role').notNull().default('viewer'),
+ role:  text('role').notNull().default('viewer'),
  verified: boolean('verified').notNull().default(false),
  createdAt: timestamp('created_at').notNull().defaultNow(),
 })
@@ -178,10 +178,10 @@ import { defineFactory } from 'drizzle-fixtures'
 
 const userFactory = defineFactory(users, {
  overrides: {
-  // static value
-  role: 'viewer',
-  // or function receiving { seq }
-  email: ({ seq }) => `user-${seq}@example.com`,
+ // static value
+ role: 'viewer',
+ // or function receiving { seq }
+ email: ({ seq }) => `user-${seq}@example.com`,
  },
 })
 ```
@@ -306,6 +306,20 @@ beforeEach(() => {
 
 ---
 
+### `factory.ready()`
+
+Waits for faker detection to complete. Returns immediately if faker is not installed.
+
+```ts
+const userFactory = defineFactory(users)
+await userFactory.ready() // ensure faker is loaded before first build()
+const user = userFactory.build() // guaranteed to use faker values if installed
+```
+
+`build()` without `await factory.ready()` works but may use deterministic values on the very first call if the async faker import hasn't resolved yet.
+
+---
+
 ## Related Records
 
 Use `use()` inside an override function to create a related record automatically when calling `create()`.
@@ -317,19 +331,19 @@ import { users, posts } from './schema'
 const userFactory = defineFactory(users)
 
 const postFactory = defineFactory(posts, {
-  overrides: {
-    // use is undefined in build() context — guard with a ternary
-    authorId: ({ use, seq }) =>
-      use
-        ? use(userFactory).then(u => u.id)  // create() → inserts real user
-        : seq,                               // build() → uses seq as fallback
-  },
+ overrides: {
+  // use is undefined in build() context guard with a ternary
+  authorId: ({ use, seq }) =>
+   use
+    ? use(userFactory).then(u => u.id) // create() → inserts real user
+    : seq,                // build() → uses seq as fallback
+ },
 })
 
-// build() — sync, no DB, authorId = seq value
+// build() sync, no DB, authorId = seq value
 const post = postFactory.build()
 
-// create() — inserts a user first, then inserts a post with the real user.id
+// create() inserts a user first, then inserts a post with the real user.id
 const saved = await postFactory.create(db)
 // saved.authorId === inserted user's real id
 ```
@@ -338,17 +352,17 @@ const saved = await postFactory.create(db)
 
 - `use` is `undefined` in `build()` context and a live function in `create()` context
 - Always guard: `use ? use(factory).then(...) : fallback`
-- Each `use()` call creates a **new** related record — no deduplication
+- Each `use()` call creates a **new** related record no deduplication
 - Circular `use()` chains (A → B → A) throw an error immediately
 
 ### Multiple relations
 
 ```ts
 const commentFactory = defineFactory(comments, {
-  overrides: {
-    authorId: ({ use, seq }) => use ? use(userFactory).then(u => u.id) : seq,
-    postId:   ({ use, seq }) => use ? use(postFactory).then(p => p.id) : seq,
-  },
+ overrides: {
+  authorId: ({ use, seq }) => use ? use(userFactory).then(u => u.id) : seq,
+  postId:  ({ use, seq }) => use ? use(postFactory).then(p => p.id) : seq,
+ },
 })
 
 // Inserts: 1 user (for the post's author) + 1 user (for the comment's author) + 1 post + 1 comment
@@ -451,15 +465,7 @@ When faker is available, semantic heuristics use realistic values:
 | `address` | `faker.location.streetAddress()` |
 | `zip`, `postalCode` | `faker.location.zipCode()` |
 
-```ts
-const userFactory = defineFactory(users)
-await userFactory.ready() // wait for faker detection — optional but recommended
-const user = userFactory.build() // guaranteed to use faker values if installed
-```
-
-> Calling `build()` without `await factory.ready()` works but may use deterministic values on the first call if faker detection hasn't completed yet.
-
-> Faker is detected via a dynamic `import()` at module load time. If the package is not installed the import fails silently and drizzle-fixtures falls back to deterministic values.
+> Faker is detected via a dynamic `import()` at module load time. If the package is not installed the import fails silently and drizzle-fixtures falls back to deterministic values. Call `await factory.ready()` before the first `build()` to guarantee faker values are used.
 
 ---
 
@@ -487,24 +493,49 @@ const factory = defineFactory(users)
 
 // build() return type is exactly typeof users.$inferInsert
 const user = factory.build()
-//  ^? { email: string; firstName: string | null; role: string; ... }
+// ^? { email: string; firstName: string | null; role: string; ... }
 
 // create() return type is exactly typeof users.$inferSelect
 const saved = await factory.create(db)
-//  ^? { id: number; email: string; createdAt: Date; ... }
+// ^? { id: number; email: string; createdAt: Date; ... }
 
 // Overrides are typed wrong field types are a compile error
 factory.build({ role: 123 })
-//          ^^^ Type 'number' is not assignable to type 'string'
+//     ^^^ Type 'number' is not assignable to type 'string'
 ```
 
-**Override function type:**
+**Override function types:**
 
 ```ts
-type FieldOverride<T> = T | ((ctx: { seq: number }) => T)
+import type { BuildCtx, CreateCtx, FactoryCtx } from 'drizzle-fixtures'
+
+// build() context use is always undefined
+interface BuildCtx { seq: number; use: undefined }
+
+// create() context use is a live async function
+interface CreateCtx { seq: number; use: <T extends Table>(factory: Factory<T>) => Promise<InferSelectModel<T>> }
+
+// union use when one function handles both contexts
+type FactoryCtx = BuildCtx | CreateCtx
+
+// FieldOverride accepts a static value, a sync function, or an async function
+type FieldOverride<T> =
+ | T
+ | ((ctx: BuildCtx) => T)
+ | ((ctx: FactoryCtx) => T | Promise<T>)
 ```
 
-Every override can be either a static value or a function receiving `{ seq }`.
+Override functions receive `BuildCtx` in `build()` and `CreateCtx` in `create()`. Use the `FactoryCtx` union when writing a single function that handles both:
+
+```ts
+// Typed override handles both build() and create() contexts
+const postFactory = defineFactory(posts, {
+ overrides: {
+  authorId: ({ use, seq }: FactoryCtx) =>
+   use ? use(userFactory).then(u => u.id) : seq,
+ },
+})
+```
 
 ---
 
@@ -517,16 +548,32 @@ Every override can be either a static value or a function receiving `{ seq }`.
 ### Build pipeline (per field, per `build()` call)
 
 ```
+seq += 1
 for each column:
- 1. skip?    → serial PK or hasDefault (no user override) → omit field
- 2. user override provided? → resolve (static or fn(ctx)) → use it
- 3. semantic match?     → name heuristic → use it
- 4. type fallback      → dataType/columnType dispatch → use it
+ 1. user override provided? → resolve sync (fn(BuildCtx) or static value) → use it
+  └─ if override returns a Promise → throw (build() is synchronous)
+ 2. skip?  → serial PK or hasDefault (no override) → omit field
+ 3. semantic match? → name heuristic → use it
+ 4. type fallback  → dataType/columnType dispatch → use it
+```
+
+### Create pipeline (per field, per `create()` call)
+
+```
+seq += 1
+build CreateCtx with live use() function
+for each column (sequential respects FK insert order):
+ 1. user override provided? → await resolve (fn(CreateCtx) or static value)
+  └─ fn may call use(relatedFactory) → triggers relatedFactory.create(db)
+ 2. skip?  → serial PK or hasDefault (no override) → omit field
+ 3. semantic match? → name heuristic → use it
+ 4. type fallback  → dataType/columnType dispatch → use it
+insert resolved data → return full row (RETURNING or select-by-PK)
 ```
 
 ### Sequence counter
 
-Each factory instance holds a closure variable `seq` starting at 0. It increments at the top of every `build()` call. `buildList(n)` calls `build()` n times, so seq increments continuously. Independent factories have independent counters.
+Each factory instance holds a closure variable `seq` starting at 0. It increments at the start of every `build()` and `create()` call. `buildList(n)` calls `build()` n times so seq increments continuously. Independent factories have independent counters.
 
 ### MySQL `create()` path
 
