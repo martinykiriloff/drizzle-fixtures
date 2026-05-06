@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { Column } from 'drizzle-orm'
 
 export const SKIP = Symbol('drizzle-factory:skip')
@@ -26,7 +27,7 @@ export function getTypeDefault(column: Column, seq: number): unknown {
 
   // Primary key UUID → generate one
   if (primary && /uuid/i.test(columnType)) {
-    return crypto.randomUUID()
+    return randomUUID()
   }
 
   // Has DB default and not PK → skip
@@ -41,7 +42,7 @@ export function getTypeDefault(column: Column, seq: number): unknown {
 
   // UUID column (non-PK)
   if (/uuid/i.test(columnType)) {
-    return crypto.randomUUID()
+    return randomUUID()
   }
 
   // Type dispatch

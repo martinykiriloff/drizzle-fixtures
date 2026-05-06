@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
@@ -151,7 +152,7 @@ describe('semantic heuristics', () => {
   // Test UUID generation via a custom field
   it('uuid non-pk field generates UUID', () => {
     // sessionId has defaultRandom → SKIP. Test via override to confirm UUID format works.
-    const user = userFactory.build({ sessionId: crypto.randomUUID() })
+    const user = userFactory.build({ sessionId: randomUUID() })
     expect(user.sessionId).toMatch(/^[0-9a-f-]{36}$/)
   })
 
