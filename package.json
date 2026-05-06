@@ -1,6 +1,6 @@
 {
   "name": "drizzle-fixtures",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Type-safe test data factories for Drizzle ORM",
   "keywords": [
     "drizzle",
@@ -30,6 +30,16 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./vitest": {
+      "types": "./dist/integrations/vitest.d.ts",
+      "import": "./dist/integrations/vitest.js",
+      "require": "./dist/integrations/vitest.cjs"
+    },
+    "./jest": {
+      "types": "./dist/integrations/jest.d.ts",
+      "import": "./dist/integrations/jest.js",
+      "require": "./dist/integrations/jest.cjs"
     }
   },
   "files": [
@@ -45,7 +55,8 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint src tests",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build",
+    "publish:jsr": "npx jsr publish"
   },
   "peerDependencies": {
     "drizzle-orm": ">=0.29.0"
@@ -53,10 +64,14 @@
   "peerDependenciesMeta": {
     "@faker-js/faker": {
       "optional": true
+    },
+    "@jest/globals": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@faker-js/faker": "^9.0.0",
+    "@jest/globals": "^29.0.0",
     "@types/better-sqlite3": "^7.0.0",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.59.2",

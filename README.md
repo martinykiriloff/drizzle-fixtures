@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/martinykiriloff/drizzle-fixtures/actions/workflows/ci.yml/badge.svg)](https://github.com/martinykiriloff/drizzle-fixtures/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/drizzle-fixtures)](https://www.npmjs.com/package/drizzle-fixtures)
+[![jsr](https://jsr.io/badges/@martin/drizzle-fixtures)](https://jsr.io/@martin/drizzle-fixtures)
 [![license](https://img.shields.io/github/license/martinykiriloff/drizzle-fixtures)](LICENSE)
 
 Type-safe test data factories for [Drizzle ORM](https://orm.drizzle.team). 
@@ -38,6 +39,9 @@ const saved = await userFactory.create(db)     // SelectUser inserts to DB
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
 - [Related Records](#related-records)
+- [Composing Factories](#composing-factories)
+- [Seeding](#seeding)
+- [Test Framework Integration](#test-framework-integration)
 - [Value Generation](#value-generation)
 - [Faker.js Integration](#fakerjs-integration)
 - [Supported Dialects](#supported-dialects)
@@ -59,6 +63,10 @@ Most test helpers require you to manually map every column to a fake value. driz
 | Optional faker.js for richer values | ✓ |
 | Sequence counter for unique values | ✓ |
 | Immutable state presets | ✓ |
+| Related records via `use()` | ✓ |
+| Compose multiple factories | ✓ |
+| DB seeder orchestration | ✓ |
+| Vitest / Jest helpers | ✓ |
 | Zero runtime dependencies | ✓ |
 
 ---
@@ -76,7 +84,9 @@ drizzle-fixtures takes the opposite approach schema introspection does the mappi
 | Value inference | Automatic from schema | Manual |
 | Faker.js | Auto-detected | Not built-in |
 | Related records (`use()`) | ✓ | ✓ |
-| Compose factories | Planned | ✓ |
+| Compose factories | ✓ | ✓ |
+| DB seeder orchestration | ✓ | ✗ |
+| Vitest / Jest helpers | ✓ | ✗ |
 
 **When to use drizzle-fixtures:** You want to get going fast with minimal boilerplate. 
 **When to use @praha/drizzle-factory:** You want full explicit control over every generated value.
@@ -110,6 +120,13 @@ npm install --save-dev @faker-js/faker
 ```
 
 **Requirements:** Node.js >= 18, Bun, or Deno (ESM-compatible runtimes).
+
+**Subpath imports** for test framework helpers:
+
+```ts
+import { useFactory, useSeeder } from 'drizzle-fixtures/vitest'
+import { useFactory, useSeeder } from 'drizzle-fixtures/jest'
+```
 
 ---
 
@@ -320,6 +337,39 @@ const user = userFactory.build() // guaranteed to use faker values if installed
 
 ---
 
+### `composeFactory(factories)`
+
+Groups multiple factories into a namespaced object with a shared `resetSeq()`. See [Composing Factories](#composing-factories) for full usage.
+
+```ts
+import { composeFactory } from 'drizzle-fixtures'
+
+const factory = composeFactory({ users: userFactory, posts: postFactory })
+factory.users.build()
+factory.posts.create(db)
+factory.resetSeq() // resets all member sequences
+```
+
+---
+
+### `defineSeeder(db, seeds)`
+
+Orchestrates ordered DB seeding with `run()` and `reset()`. Supports optional `before` hooks for truncation. See [Seeding](#seeding) for full usage.
+
+```ts
+import { defineSeeder } from 'drizzle-fixtures'
+
+const seeder = defineSeeder(db, {
+ users: () => userFactory.createList(db, 10),
+ posts: () => postFactory.createList(db, 50),
+})
+
+const { users, posts } = await seeder.run()
+await seeder.reset() // re-seed (call before hooks first if defined)
+```
+
+---
+
 ## Related Records
 
 Use `use()` inside an override function to create a related record automatically when calling `create()`.
@@ -370,6 +420,150 @@ const comment = await commentFactory.create(db)
 ```
 
 > **Note:** `use()` is not available in `build()` context because `build()` is synchronous and has no database connection. If you call `use()` in `build()` without guarding, a `TypeError` will be thrown. The guard pattern `use ? use(factory)... : fallback` handles both contexts cleanly.
+
+---
+
+## Composing Factories
+
+`composeFactory` groups multiple factories into a single namespaced object with a shared `resetSeq()`.
+
+```ts
+import { composeFactory } from 'drizzle-fixtures'
+import { userFactory, postFactory, commentFactory } from './factories'
+
+const factory = composeFactory({
+ users: userFactory,
+ posts: postFactory,
+ comments: commentFactory,
+})
+
+// Build in-memory
+const user = factory.users.build()
+const post = factory.posts.build({ authorId: user.id })
+
+// Insert to DB
+const dbUser = await factory.users.create(db)
+const dbPost = await factory.posts.create(db, { authorId: dbUser.id })
+
+// Reset all sequences at once (useful in beforeEach)
+factory.resetSeq()
+
+// All factory methods work through composed access
+const admins = factory.users.buildList(3, { role: 'admin' })
+```
+
+Member factories are the same instances — `factory.users === userFactory`. There is no wrapping or proxying.
+
+---
+
+## Seeding
+
+`defineSeeder` orchestrates full database seeding. It defines an ordered set of seed operations, runs them in definition order, and supports truncate + re-seed via `before` hooks.
+
+```ts
+import { defineSeeder } from 'drizzle-fixtures'
+import { userFactory, postFactory } from './factories'
+
+const seeder = defineSeeder(db, {
+ users: () => userFactory.createList(db, 10),
+ posts: () => postFactory.createList(db, 50),
+})
+
+// Run all seeds in definition order
+const result = await seeder.run()
+// { users: User[], posts: Post[] }
+
+// Run only specific seeds (still in definition order)
+await seeder.run(['users'])
+
+// Re-seed with truncation using before hooks
+const seederWithCleanup = defineSeeder(db, {
+ users: {
+  seed: () => userFactory.createList(db, 10),
+  before: async () => db.delete(users),  // truncate first
+ },
+ posts: {
+  seed: () => postFactory.createList(db, 50),
+  before: async () => db.delete(posts),
+ },
+})
+
+await seederWithCleanup.reset()         // runs before hooks, then re-seeds
+await seederWithCleanup.reset(['users']) // reset only users
+```
+
+Seeds run **sequentially** in definition order — later seeds can reference data created by earlier ones:
+
+```ts
+let seedUserId = 0
+const seeder = defineSeeder(db, {
+ users: async () => {
+  const list = await userFactory.createList(db, 5)
+  seedUserId = list[0]!.id
+  return list
+ },
+ posts: () => postFactory.createList(db, 10, { authorId: seedUserId }),
+})
+```
+
+**Shorthand** (plain function) and **object form** (with `before` hook) can be mixed:
+
+```ts
+const seeder = defineSeeder(db, {
+ users: () => userFactory.createList(db, 10),       // shorthand
+ posts: {                                            // with before hook
+  seed: () => postFactory.createList(db, 50),
+  before: async () => db.delete(posts),
+ },
+})
+```
+
+---
+
+## Test Framework Integration
+
+Thin helpers that eliminate per-file boilerplate for sequence reset and DB cleanup.
+
+### Vitest
+
+```ts
+import { useFactory, useSeeder } from 'drizzle-fixtures/vitest'
+```
+
+```ts
+// Auto-reset seq in beforeEach
+const userFactory = useFactory(defineFactory(users))
+
+it('creates unique users', () => {
+ const a = userFactory.build() // seq 1
+ const b = userFactory.build() // seq 2 — next test starts at 1 again
+})
+
+// Auto-reset seq + optional DB cleanup in afterEach
+const userFactory = useFactory(defineFactory(users), {
+ cleanup: () => db.delete(users),
+})
+
+// Seeder helper — calls seeder.reset() in beforeEach
+useSeeder(seeder)
+useSeeder(seeder, ['users']) // reset only specific seeds
+```
+
+### Jest
+
+```ts
+import { useFactory, useSeeder } from 'drizzle-fixtures/jest'
+```
+
+Identical API — only the lifecycle functions differ (`beforeEach`/`afterEach` from `@jest/globals`).
+
+### Install peer deps
+
+```bash
+# Vitest already installed if you use Vitest
+# Jest:
+npm install --save-dev @jest/globals
+```
 
 ---
 
@@ -476,8 +670,9 @@ When faker is available, semantic heuristics use realistic values:
 | PostgreSQL | Supported | Uses `RETURNING` for `create()` |
 | SQLite | Supported | Uses `RETURNING` for `create()` |
 | MySQL | Supported | Insert + select-by-PK (no `RETURNING`) |
-| CockroachDB | Planned | Phase 2 |
-| SingleStore / MSSQL | Backlog | Phase 3 |
+| CockroachDB | Supported | PG-compatible, uses `RETURNING` |
+| SingleStore | Supported | MySQL-compatible, insert + select-by-PK |
+| MSSQL | Planned | Backlog |
 
 ---
 

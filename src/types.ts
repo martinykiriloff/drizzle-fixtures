@@ -48,3 +48,19 @@ export interface Factory<TTable extends Table> {
   resetSeq(): void
   ready(): Promise<void>
 }
+
+export type ComposedFactory<TFactories extends Record<string, Factory<Table>>> = {
+  [K in keyof TFactories]: TFactories[K]
+} & { resetSeq(): void }
+
+export type SeedFn = () => Promise<unknown[]>
+
+export interface SeedEntry {
+  seed: SeedFn
+  before?: () => Promise<void> | void
+}
+
+export interface Seeder<TSeeds extends Record<string, SeedFn>> {
+  run(keys?: Array<keyof TSeeds>): Promise<{ [K in keyof TSeeds]: Awaited<ReturnType<TSeeds[K]>> }>
+  reset(keys?: Array<keyof TSeeds>): Promise<void>
+}

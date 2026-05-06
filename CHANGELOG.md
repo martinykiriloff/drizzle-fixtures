@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0] — 2026-05-07
+
+### Added
+- `composeFactory` — group multiple factories into a namespaced object with shared `resetSeq()`
+- `defineSeeder` — orchestrate full DB seeding with `run()` and `reset()`, supports `before` hooks per seed
+- `drizzle-fixtures/vitest` subpath — `useFactory` and `useSeeder` Vitest helpers (auto-reset seq, optional cleanup)
+- `drizzle-fixtures/jest` subpath — same helpers for Jest via `@jest/globals`
+- `ComposedFactory`, `Seeder`, `SeedFn`, `SeedEntry` exported types
+- CockroachDB support documented — PG-compatible, uses `RETURNING`, works without code changes
+- SingleStore support documented — MySQL-compatible, insert + select-by-PK, works without code changes
+- JSR publish config (`jsr.json`) at `@martin/drizzle-fixtures`
+
+### Changed
+- `package.json` exports now include `./vitest` and `./jest` subpath entries
+- `tsup.config.ts` builds integration entry points alongside main bundle
+- Version bumped `1.0.x` → `1.1.0`
+
+---
+
 ## [0.2.0] — 2026-05-06
 
 ### Added
