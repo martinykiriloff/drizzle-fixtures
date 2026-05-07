@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { defineFactory } from '../src/factory.js'
@@ -215,6 +215,70 @@ describe('create()', () => {
     const itemFactory = defineFactory(items)
     const records = await itemFactory.createList(db, 3)
     expect(records).toHaveLength(3)
+  })
+})
+
+// batch insert optimization
+describe('createList batch optimization', () => {
+  it('no async overrides → single bulk INSERT', async () => {
+    const db = makeDb()
+    const itemFactory = defineFactory(items)
+    const spy = vi.spyOn(db, 'insert')
+    const records = await itemFactory.createList(db, 5)
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(records).toHaveLength(5)
+  })
+
+  it('bulk insert seq values are correct (1, 2, 3…)', async () => {
+    const db = makeDb()
+    const itemFactory = defineFactory(items, {
+      overrides: { name: ({ seq }) => `item-${seq}` },
+    })
+    const records = await itemFactory.createList(db, 3)
+    expect(records[0]?.name).toBe('item-1')
+    expect(records[1]?.name).toBe('item-2')
+    expect(records[2]?.name).toBe('item-3')
+  })
+
+  it('bulk result count matches n', async () => {
+    const db = makeDb()
+    const itemFactory = defineFactory(items)
+    const records = await itemFactory.createList(db, 7)
+    expect(records).toHaveLength(7)
+  })
+
+  it('use() override detected → sequential INSERT (multiple calls)', async () => {
+    const db = makeDb()
+    const relatedFactory = defineFactory(items)
+    const factoryWithUse = defineFactory(items, {
+      overrides: {
+        name: ({ use, seq }) => use ? use(relatedFactory).then(r => r.name) : `item-${seq}`,
+      },
+    })
+    const spy = vi.spyOn(db, 'insert')
+    await factoryWithUse.createList(db, 3)
+    // sequential: 3 main inserts + 3 related inserts = 6 total (all > 1)
+    expect(spy.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('batch: "never" uses sequential INSERT regardless', async () => {
+    const db = makeDb()
+    const itemFactory = defineFactory(items, { batch: 'never' })
+    const spy = vi.spyOn(db, 'insert')
+    await itemFactory.createList(db, 3)
+    expect(spy).toHaveBeenCalledTimes(3)
+  })
+
+  it('batch: "always" with async use() override throws', async () => {
+    const db = makeDb()
+    const relatedFactory = defineFactory(items)
+    const factoryWithUse = defineFactory(items, {
+      batch: 'always',
+      overrides: {
+        name: ({ use, seq }) => use ? use(relatedFactory).then(r => r.name) : `item-${seq}`,
+      },
+    })
+    await expect(factoryWithUse.createList(db, 3)).rejects.toThrow('batch: "always"')
   })
 })
 

@@ -5,6 +5,7 @@ export default defineConfig({
     'src/index.ts',
     'src/integrations/vitest.ts',
     'src/integrations/jest.ts',
+    'src/cli/index.ts',
   ],
   format: ['esm', 'cjs'],
   dts: true,

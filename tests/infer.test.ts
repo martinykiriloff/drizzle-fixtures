@@ -95,3 +95,24 @@ describe('getTypeDefault', () => {
     expect(val).toBe(6)
   })
 })
+
+describe('MSSQL column types', () => {
+  it('MsSqlVarChar → text-{seq}', () => {
+    expect(getTypeDefault(makeCol({ dataType: 'string', columnType: 'MsSqlVarChar' }), 3)).toBe('text-3')
+  })
+
+  it('MsSqlUniqueIdentifier → valid UUID format', () => {
+    const val = getTypeDefault(makeCol({ dataType: 'string', columnType: 'MsSqlUniqueIdentifier' }), 1)
+    expect(typeof val).toBe('string')
+    expect(val as string).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+  })
+
+  it('MsSqlDateTime → Date instance', () => {
+    const val = getTypeDefault(makeCol({ dataType: 'date', columnType: 'MsSqlDateTime' }), 1)
+    expect(val).toBeInstanceOf(Date)
+  })
+
+  it('MsSqlBit → true', () => {
+    expect(getTypeDefault(makeCol({ dataType: 'boolean', columnType: 'MsSqlBit' }), 1)).toBe(true)
+  })
+})

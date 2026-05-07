@@ -37,6 +37,8 @@ export type Overrides<TInsert> = {
 
 export interface FactoryOptions<TInsert> {
   overrides?: Overrides<TInsert>
+  batch?: 'auto' | 'always' | 'never'
+  validate?: boolean
 }
 
 export interface Factory<TTable extends Table> {

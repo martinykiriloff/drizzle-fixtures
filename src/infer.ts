@@ -40,6 +40,20 @@ export function getTypeDefault(column: Column, seq: number): unknown {
     return enumValues[0]
   }
 
+  // MSSQL column types
+  if (/^MsSql/.test(columnType)) {
+    if (/UniqueIdentifier/.test(columnType))            return randomUUID()
+    if (/BigInt/.test(columnType))                      return BigInt(seq)
+    if (/Decimal/.test(columnType))                     return '10.00'
+    if (/Float|Real/.test(columnType))                  return seq * 1.5
+    if (/Int|SmallInt|TinyInt/.test(columnType))        return seq
+    if (/VarChar|NVarChar|NText|Text/.test(columnType)) return `text-${seq}`
+    if (/Boolean|Bit/.test(columnType))                 return true
+    if (/DateTime/.test(columnType))                    return new Date()
+    if (/Date$/.test(columnType))                       return new Date().toISOString().split('T')[0]
+    if (/Json/.test(columnType))                        return {}
+  }
+
   // UUID column (non-PK)
   if (/uuid/i.test(columnType)) {
     return randomUUID()

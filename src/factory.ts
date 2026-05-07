@@ -1,4 +1,4 @@
-import { getTableColumns } from 'drizzle-orm'
+import { getTableColumns, getTableName } from 'drizzle-orm'
 import type { Column, InferInsertModel, InferSelectModel, Table } from 'drizzle-orm'
 import { SKIP, getTypeDefault } from './infer.js'
 import { getSemanticDefault } from './semantic.js'
@@ -11,8 +11,8 @@ interface RawInsertBuilder {
 }
 
 interface RawDb {
-  insert(table: Table): { values(data: Record<string, unknown>): RawInsertBuilder }
-  select(): { from(table: Table): { where(cond: unknown): { limit(n: number): Promise<Record<string, unknown>[]> } } }
+  insert(table: Table): { values(data: Record<string, unknown> | Record<string, unknown>[]): RawInsertBuilder }
+  select(): { from(table: Table): { where(cond: unknown): { limit(n: number): Promise<Record<string, unknown>[]> } & Promise<Record<string, unknown>[]> } }
 }
 
 function toRawDb(db: AnyDrizzleDb): RawDb {
@@ -21,6 +21,17 @@ function toRawDb(db: AnyDrizzleDb): RawDb {
 
 // Module-level set tracking factories currently being resolved (circular detection)
 const _resolving = new Set<object>()
+
+function isAsyncOverride(override: unknown): boolean {
+  if (typeof override !== 'function') return false
+  const sentinel: CreateCtx = { seq: 0, use: () => Promise.resolve({} as never) }
+  try {
+    const result = (override as (ctx: CreateCtx) => unknown)(sentinel)
+    return result instanceof Promise
+  } catch {
+    return false
+  }
+}
 
 export function defineFactory<TTable extends Table>(
   table: TTable,
@@ -33,16 +44,54 @@ export function defineFactory<TTable extends Table>(
   let seq = 0
   const fakerPromise = initFaker()
 
-  function build(callOverrides?: Overrides<InferInsertModel<TTable>>): InferInsertModel<TTable> {
-    seq += 1
-    const buildCtx: BuildCtx = { seq, use: undefined }
+  type InsertSchemaFn = (t: TTable) => {
+    safeParse(data: unknown): {
+      success: boolean
+      error?: { issues: Array<{ path: (string | number)[]; message: string }> }
+    }
+  }
+  let _createInsertSchema: InsertSchemaFn | null | undefined = undefined
+  let _drizzleZodPromise: Promise<void> | null = null
+
+  if (options?.validate) {
+    _drizzleZodPromise = (async () => {
+      try {
+        const mod = await import('drizzle-zod')
+        _createInsertSchema = mod.createInsertSchema as InsertSchemaFn
+      } catch {
+        _createInsertSchema = null
+      }
+    })()
+  }
+
+  function validateData(data: Record<string, unknown>): void {
+    if (!options?.validate) return
+    if (_createInsertSchema === null) {
+      throw new Error(
+        '[drizzle-fixtures] validate: true requires drizzle-zod to be installed.\n' +
+        'Run: pnpm add -D drizzle-zod',
+      )
+    }
+    if (_createInsertSchema === undefined) return
+    const schema = _createInsertSchema(table)
+    const parsed = schema.safeParse(data)
+    if (!parsed.success && parsed.error) {
+      const tableName = getTableName(table)
+      throw new Error(
+        `[drizzle-fixtures] Validation failed for table "${tableName}":\n` +
+        parsed.error.issues
+          .map(i => `  ${i.path.join('.')}: ${i.message}`)
+          .join('\n'),
+      )
+    }
+  }
+
+  function buildDataForSeq(
+    currentSeq: number,
+    mergedOverrides: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const buildCtx: BuildCtx = { seq: currentSeq, use: undefined }
     const faker = getFaker()
-
-    const mergedOverrides = {
-      ...options?.overrides,
-      ...callOverrides,
-    } as Record<string, unknown>
-
     const result: Record<string, unknown> = {}
 
     for (const [tsKey, col] of columnEntries) {
@@ -51,7 +100,6 @@ export function defineFactory<TTable extends Table>(
         if (typeof override === 'function') {
           const resolved = (override as (ctx: BuildCtx) => unknown)(buildCtx)
           if (resolved instanceof Promise) {
-            // Suppress the unhandled rejection before throwing the sync error
             resolved.catch(() => undefined)
             throw new Error(
               `[drizzle-fixtures] Override for field "${tsKey}" returned a Promise in build() context. ` +
@@ -65,10 +113,10 @@ export function defineFactory<TTable extends Table>(
         continue
       }
 
-      const typeVal = getTypeDefault(col, seq)
+      const typeVal = getTypeDefault(col, currentSeq)
       if (typeVal === SKIP) continue
 
-      const semanticVal = getSemanticDefault(tsKey, seq, faker)
+      const semanticVal = getSemanticDefault(tsKey, currentSeq, faker)
       if (semanticVal !== undefined) {
         result[tsKey] = semanticVal
         continue
@@ -77,7 +125,17 @@ export function defineFactory<TTable extends Table>(
       result[tsKey] = typeVal
     }
 
-    return result as InferInsertModel<TTable>
+    validateData(result)
+    return result
+  }
+
+  function build(callOverrides?: Overrides<InferInsertModel<TTable>>): InferInsertModel<TTable> {
+    seq += 1
+    const mergedOverrides = {
+      ...options?.overrides,
+      ...callOverrides,
+    } as Record<string, unknown>
+    return buildDataForSeq(seq, mergedOverrides) as InferInsertModel<TTable>
   }
 
   function buildList(
@@ -89,6 +147,7 @@ export function defineFactory<TTable extends Table>(
 
   async function ready(): Promise<void> {
     await fakerPromise
+    if (_drizzleZodPromise) await _drizzleZodPromise
   }
 
   async function insertRow(
@@ -189,6 +248,8 @@ export function defineFactory<TTable extends Table>(
         data[tsKey] = typeVal
       }
 
+      if (_drizzleZodPromise) await _drizzleZodPromise
+      validateData(data)
       return await insertRow(db, data)
     } finally {
       _resolving.delete(identity)
@@ -200,11 +261,76 @@ export function defineFactory<TTable extends Table>(
     n: number,
     callOverrides?: Overrides<InferInsertModel<TTable>>,
   ): Promise<Array<InferSelectModel<TTable>>> {
-    const results: Array<InferSelectModel<TTable>> = []
-    for (let i = 0; i < n; i++) {
-      results.push(await create(db, callOverrides))
+    await fakerPromise
+
+    const batchMode = options?.batch ?? 'auto'
+    const merged = {
+      ...options?.overrides,
+      ...callOverrides,
+    } as Record<string, unknown>
+
+    const hasAsync = Object.values(merged).some(isAsyncOverride)
+
+    if (batchMode === 'always' && hasAsync) {
+      throw new Error(
+        '[drizzle-fixtures] batch: "always" set but an async use() override was detected. ' +
+        'Remove the use() override or change batch to "auto".',
+      )
     }
-    return results
+
+    const useSequential = batchMode === 'never' || (batchMode === 'auto' && hasAsync)
+
+    if (useSequential) {
+      const results: Array<InferSelectModel<TTable>> = []
+      for (let i = 0; i < n; i++) {
+        results.push(await create(db, callOverrides))
+      }
+      return results
+    }
+
+    // Bulk path — build all rows synchronously, then single INSERT
+    const rows = Array.from({ length: n }, () => {
+      seq += 1
+      return buildDataForSeq(seq, merged)
+    })
+
+    const rawDb = toRawDb(db)
+    const qb = rawDb.insert(table).values(rows)
+
+    if (typeof qb.returning === 'function') {
+      const inserted = await qb.returning()
+      return inserted as Array<InferSelectModel<TTable>>
+    }
+
+    // MySQL / SingleStore — no RETURNING; select by PK values
+    await new Promise<void>((resolve, reject) => {
+      if (qb.then) {
+        qb.then(() => resolve(), reject)
+      } else {
+        resolve()
+      }
+    })
+
+    const pkEntry = columnEntries.find(([, col]) => col.primary)
+    if (!pkEntry) throw new Error('drizzle-fixtures: no primary key for bulk select-after-insert')
+
+    const [pkTsKey, pkCol] = pkEntry
+    const pks = rows.map(r => r[pkTsKey]).filter(pk => pk !== undefined)
+
+    if (pks.length === 0) {
+      throw new Error(
+        'drizzle-fixtures: bulk insert cannot retrieve rows — auto-increment PK not available before insert. ' +
+        'Use batch: "never" with auto-increment MySQL tables.',
+      )
+    }
+
+    const { inArray } = await import('drizzle-orm')
+    const selected = await (rawDb
+      .select()
+      .from(table)
+      .where(inArray(pkCol, pks as never[])) as unknown as Promise<Record<string, unknown>[]>)
+
+    return selected as Array<InferSelectModel<TTable>>
   }
 
   function state(
@@ -212,6 +338,7 @@ export function defineFactory<TTable extends Table>(
     stateOverrides: Overrides<InferInsertModel<TTable>>,
   ): Factory<TTable> {
     return defineFactory(table, {
+      ...options,
       overrides: {
         ...options?.overrides,
         ...stateOverrides,

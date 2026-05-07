@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.0] — 2026-05-07
+
+### Added
+- Batch insert optimization — `createList` uses a single bulk INSERT when no async overrides are present (10–100× faster for large seed scripts)
+- `batch` option on `defineFactory`: `'auto'` (default) | `'always'` | `'never'`
+- `validate` option on `defineFactory` — validates generated data against `drizzle-zod` insert schema on every `build()`
+- `drizzle-zod` optional peer dependency for validation
+- CLI: `npx drizzle-fixtures generate` — generates typed factory files from a Drizzle schema file
+- MSSQL support — full column type inference (MsSqlVarChar, MsSqlUniqueIdentifier, MsSqlDateTime, MsSqlBit, and more)
+- VitePress documentation site at `docs/` — deployed to GitHub Pages via Actions
+
+### Changed
+- `tsup.config.ts` — added `src/cli/index.ts` entry point
+- `package.json` — added `bin`, docs scripts, `drizzle-zod` optional peer dep meta, `vitepress` devDep
+
+---
+
 ## [1.1.0] — 2026-05-07
 
 ### Added

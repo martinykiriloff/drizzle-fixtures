@@ -4,6 +4,8 @@
 [![npm](https://img.shields.io/npm/v/drizzle-fixtures)](https://www.npmjs.com/package/drizzle-fixtures)
 [![license](https://img.shields.io/github/license/martinykiriloff/drizzle-fixtures)](LICENSE)
 
+📖 **[Documentation](https://martinykiriloff.github.io/drizzle-fixtures/)** — full API reference and guides
+
 Type-safe test data factories for [Drizzle ORM](https://orm.drizzle.team).  
 Introspects your schema at runtime. Generates fully-typed fixture data. Zero configuration.
 
