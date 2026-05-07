@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdir, rm, readFile, stat } from 'node:fs/promises'
+import { rm, readFile, stat } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { generate } from '../src/cli/generate.js'

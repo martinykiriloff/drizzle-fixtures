@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises'
-import { resolve, relative, dirname, join } from 'node:path'
+import { resolve, relative, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { getTableName } from 'drizzle-orm'
 
